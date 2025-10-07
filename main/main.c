@@ -1,11 +1,13 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
+#include "queue.h"
 
 #include <stdio.h>
 #include "pico/stdlib.h"
 
 #include "hardware/gpio.h"
+#include "hardware/adc.h"
 #include "hardware/i2c.h"
 #include "pico/stdlib.h"
 #include "pins.h"

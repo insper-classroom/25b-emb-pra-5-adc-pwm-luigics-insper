@@ -90,6 +90,7 @@ void uart_task(void *p){
     const uint8_t EOP = 0xFF;
 
     while (1){
+        
         if(xQueueReceive(xQueueADC, &data_receb, portMAX_DELAY) == pdTRUE){
             //atualiza o valor do eixo dependendo do respectivo eixo
             uint8_t val_lsb = data_receb.valor & 0xFF; //compara bit a bit com 255

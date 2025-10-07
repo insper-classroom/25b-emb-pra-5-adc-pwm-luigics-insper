@@ -11,112 +11,108 @@
 #include "pins.h"
 #include "ssd1306.h"
 
-// === Definições para SSD1306 ===
-ssd1306_t disp;
+typedef struct {
+    int eixo;
+    int valor;
+} joystick_data;
 
-QueueHandle_t xQueueBtn;
+QueueHandle_t xQueueADC;
 
-// == funcoes de inicializacao ===
-void btn_callback(uint gpio, uint32_t events) {
-    if (events & GPIO_IRQ_EDGE_FALL) xQueueSendFromISR(xQueueBtn, &gpio, 0);
-}
 
-void oled_display_init(void) {
-    i2c_init(i2c1, 400000);
-    gpio_set_function(2, GPIO_FUNC_I2C);
-    gpio_set_function(3, GPIO_FUNC_I2C);
-    gpio_pull_up(2);
-    gpio_pull_up(3);
-
-    disp.external_vcc = false;
-    ssd1306_init(&disp, 128, 64, 0x3C, i2c1);
-    ssd1306_clear(&disp);
-    ssd1306_show(&disp);
-}
-
-void btns_init(void) {
-    gpio_init(BTN_PIN_R);
-    gpio_set_dir(BTN_PIN_R, GPIO_IN);
-    gpio_pull_up(BTN_PIN_R);
-
-    gpio_init(BTN_PIN_G);
-    gpio_set_dir(BTN_PIN_G, GPIO_IN);
-    gpio_pull_up(BTN_PIN_G);
-
-    gpio_init(BTN_PIN_B);
-    gpio_set_dir(BTN_PIN_B, GPIO_IN);
-    gpio_pull_up(BTN_PIN_B);
-
-    gpio_set_irq_enabled_with_callback(BTN_PIN_R,
-                                       GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
-                                       true, &btn_callback);
-    gpio_set_irq_enabled(BTN_PIN_G, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
-                         true);
-    gpio_set_irq_enabled(BTN_PIN_B, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
-                         true);
-}
-
-void led_rgb_init(void) {
-    gpio_init(LED_PIN_R);
-    gpio_set_dir(LED_PIN_R, GPIO_OUT);
-    gpio_put(LED_PIN_R, 1);
-
-    gpio_init(LED_PIN_G);
-    gpio_set_dir(LED_PIN_G, GPIO_OUT);
-    gpio_put(LED_PIN_G, 1);
-
-    gpio_init(LED_PIN_B);
-    gpio_set_dir(LED_PIN_B, GPIO_OUT);
-    gpio_put(LED_PIN_B, 1);
-}
-
-void task_1(void *p) {
-    btns_init();
-    led_rgb_init();
-    oled_display_init();
-
-    uint btn_data;
+void x_task(void *p) {
+    int samples[5] = {0};
+    long soma = 0;
+    int ind = 0;
+    joystick_data dados_env;
+    dados_env.eixo = 0;
 
     while (1) {
-        if (xQueueReceive(xQueueBtn, &btn_data, pdMS_TO_TICKS(2000))) {
-            printf("btn: %d \n", btn_data);
+        adc_select_input(0);
+        int raw_x = adc_read();
 
-            switch (btn_data) {
-                case BTN_PIN_B:
-                    gpio_put(LED_PIN_B, 0);
-                    ssd1306_draw_string(&disp, 8, 0, 2, "BLUE");
-                    ssd1306_show(&disp);
-                    break;
-                case BTN_PIN_G:
-                    gpio_put(LED_PIN_G, 0);
-                    ssd1306_draw_string(&disp, 8, 24, 2, "GREEN");
-                    ssd1306_show(&disp);
-                    break;
-                case BTN_PIN_R:
-                    gpio_put(LED_PIN_R, 0);
 
-                    ssd1306_draw_string(&disp, 8, 48, 2, "RED");
-                    ssd1306_show(&disp);
-                    break;
-                default:
-                    // Handle other buttons if needed
-                    break;
-            }
-        } else {
-            ssd1306_clear(&disp);
-            ssd1306_show(&disp);
-            gpio_put(LED_PIN_R, 1);
-            gpio_put(LED_PIN_G, 1);
-            gpio_put(LED_PIN_B, 1);
+        soma -= samples[ind];
+        samples[ind] = raw_x; //subst amostra mais antiga pela nova leitura
+        soma += samples[ind];
+        ind = (ind + 1) % 5; //força voltar pro começo quando chegar no final do array
+        
+        int filtrado_x = soma / 5; //nova media
+        int centrado_x = filtrado_x - 2047;
+        int x_escala_certa = (centrado_x * 255)/2047; //255 -> ajusta a escala; 2047 -> ponto central (metade do valor máximo, já que seria de -2047 a +2047)
+
+        if(x_escala_certa > -100 && x_escala_certa < 100){ //100 -> deadzone 
+            x_escala_certa = 0;
         }
+
+        //envia o struct
+        dados_env.valor = x_escala_certa;
+        xQueueSend(xQueueADC, &dados_env, 0);
+
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+void y_task(void *p) {
+    int samples[5] = {0};
+    long soma = 0;
+    int ind = 0;
+    joystick_data dados_env;
+    dados_env.eixo = 1;
+
+    while (1) {
+        adc_select_input(1);
+        int raw_y = adc_read();
+
+        soma -= samples[ind];
+        samples[ind] = raw_y;
+        soma += samples[ind];
+        ind = (ind + 1) % 5;
+        
+        int filtrado_y = soma / 5;
+        int centrado_y = -(filtrado_y - 2047);  //inverte o eixo y
+        int y_escala_certa = (centrado_y * 255)/2047;
+        
+        if(y_escala_certa > -100 && y_escala_certa < 100){
+            y_escala_certa = 0;
+        }
+        
+        dados_env.valor = y_escala_certa;
+        xQueueSend(xQueueADC, &dados_env, 0);
+
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+void uart_task(void *p) {
+    joystick_data data_receb;
+    int ult_x = 0;
+    int ult_y = 0;
+
+    while (1) {
+        if (xQueueReceive(xQueueADC, &data_receb, pdMS_TO_TICKS(30)) == pdTRUE) {
+            //atualiza o valor do eixo dependendo do respectivo eixo
+            if (data_receb.eixo == 0) {
+                ult_x = data_receb.valor;
+            } else if (data_receb.eixo == 1) {
+                ult_y = data_receb.valor;
+            }
+            printf("%d,%d,0\n", ult_x, ult_y);
+        } 
     }
 }
 
 int main() {
     stdio_init_all();
 
-    xQueueBtn = xQueueCreate(32, sizeof(uint));
-    xTaskCreate(task_1, "Task 1", 8192, NULL, 1, NULL);
+    adc_init();
+    adc_gpio_init(JOYSTICK_X);
+    adc_gpio_init(JOYSTICK_Y);
+
+    xQueueADC = xQueueCreate(10, sizeof(joystick_data));
+
+    xTaskCreate(x_task, "X Task", 256, NULL, 1, NULL);
+    xTaskCreate(y_task, "Y Task", 256, NULL, 1, NULL);
+    xTaskCreate(uart_task, "UART Task", 256, NULL, 1, NULL);
 
     vTaskStartScheduler();
 

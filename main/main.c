@@ -14,21 +14,21 @@
 #include "ssd1306.h"
 
 typedef struct {
-    int eixo;
-    int valor;
+    uint8_t eixo;
+    uint16_t valor;
 } joystick_data;
 
 QueueHandle_t xQueueADC;
 
 
-void x_task(void *p) {
+void x_task(void *p){
     int samples[5] = {0};
     long soma = 0;
     int ind = 0;
     joystick_data dados_env;
     dados_env.eixo = 0;
 
-    while (1) {
+    while (1){
         adc_select_input(0);
         int raw_x = adc_read();
 
@@ -36,7 +36,7 @@ void x_task(void *p) {
         soma -= samples[ind];
         samples[ind] = raw_x; //subst amostra mais antiga pela nova leitura
         soma += samples[ind];
-        ind = (ind + 1) % 5; //força voltar pro começo quando chegar no final do array
+        ind = (ind + 1)% 5; //força voltar pro começo quando chegar no final do array
         
         int filtrado_x = soma / 5; //nova media
         int centrado_x = filtrado_x - 2047;
@@ -54,21 +54,21 @@ void x_task(void *p) {
     }
 }
 
-void y_task(void *p) {
+void y_task(void *p){
     int samples[5] = {0};
     long soma = 0;
     int ind = 0;
     joystick_data dados_env;
     dados_env.eixo = 1;
 
-    while (1) {
+    while (1){
         adc_select_input(1);
         int raw_y = adc_read();
 
         soma -= samples[ind];
         samples[ind] = raw_y;
         soma += samples[ind];
-        ind = (ind + 1) % 5;
+        ind = (ind + 1)% 5;
         
         int filtrado_y = soma / 5;
         int centrado_y = -(filtrado_y - 2047);  //inverte o eixo y
@@ -85,25 +85,22 @@ void y_task(void *p) {
     }
 }
 
-void uart_task(void *p) {
+void uart_task(void *p){
     joystick_data data_receb;
-    int ult_x = 0;
-    int ult_y = 0;
+    const uint8_t EOP = 0xFF;
 
-    while (1) {
-        if (xQueueReceive(xQueueADC, &data_receb, pdMS_TO_TICKS(30)) == pdTRUE) {
+    while (1){
+        if(xQueueReceive(xQueueADC, &data_receb, portMAX_DELAY) == pdTRUE){
             //atualiza o valor do eixo dependendo do respectivo eixo
-            if (data_receb.eixo == 0) {
-                ult_x = data_receb.valor;
-            } else if (data_receb.eixo == 1) {
-                ult_y = data_receb.valor;
-            }
-            printf("%d,%d,0\n", ult_x, ult_y);
+            uint8_t val_lsb = data_receb.valor & 0xFF; //compara bit a bit com 255
+            uint8_t val_msb = (data_receb.valor >> 8) & 0xFF; //faz o bitshift pra colocar no lugar certo
+
+            printf("%c%c%c%c", data_receb.eixo, val_msb, val_lsb, EOP);
         } 
     }
 }
 
-int main() {
+int main(){
     stdio_init_all();
 
     adc_init();

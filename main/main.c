@@ -25,10 +25,10 @@ QueueHandle_t xQueueADC;
 
 void x_task(void *p){
 
-    static int ind = 0;
-    static joystick_data dados_env;
-    static int samples[5] = {0, 0, 0, 0, 0};
-    static int soma = 0;
+    int ind = 0;
+    joystick_data dados_env;
+    int samples[5] = {0, 0, 0, 0, 0};
+    int soma = 0;
     dados_env.eixo = 0;
 
     while(1){
@@ -37,6 +37,7 @@ void x_task(void *p){
         soma = soma - samples[ind];
         samples[ind] = raw_x; //subst amostra mais antiga pela nova leitura
         soma += samples[ind];
+        
         int filtrado_x = soma / 5; //nova media
         int centrado_x = filtrado_x - 2047;
         int x_escala_certa = centrado_x / 8 ; 
@@ -61,10 +62,10 @@ void x_task(void *p){
 }
 
 void y_task(void *p){
-    static int ind = 0;
-    static joystick_data dados_env;
-    static int samples[5] = {0, 0, 0, 0, 0};
-    static int soma = 0;
+    int ind = 0;
+    joystick_data dados_env;
+    int samples[5] = {0, 0, 0, 0, 0};
+    int soma = 0;
     dados_env.eixo = 1;
 
     while(1){
@@ -73,8 +74,8 @@ void y_task(void *p){
         soma = soma - samples[ind];
         samples[ind] = raw_y;
         soma += samples[ind];
+        
         int filtrado_y = soma / 5;
-
         int centrado_y = filtrado_y - 2047;
         int y_escala_certa = centrado_y/8;
         

@@ -48,7 +48,7 @@ void x_task(void *p){
         }
         
         if(dados_env.valor != 0){
-            if(dados_env.valor != 0xFF && dados_env.valor != 0xff){
+            if(dados_env.valor != 0xFF){
                 //envia o struct
                 xQueueSend(xQueueADC,&dados_env,0);
             }
@@ -85,7 +85,7 @@ void y_task(void *p){
         }
     
        if(dados_env.valor != 0){
-            if(dados_env.valor != 0xFF && dados_env.valor != 0xff){
+            if(dados_env.valor != 0xFF){
                 xQueueSend(xQueueADC,&dados_env,0);
             }
         }
